@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Photo Print Studio v16</title>
+    <title>Photo Print Studio v17</title>
     <style>
         *, *::before, *::after {
             box-sizing: border-box;
@@ -203,6 +203,7 @@
 </head>
 <body>
 
+    <!-- 🏠 HOME SCREEN -->
     <div class="home-screen" id="home-view">
         <h1>Photo Print Studio</h1>
         <p>Elige el formato de impresión para tu plantilla</p>
@@ -232,6 +233,7 @@
         </div>
     </div>
 
+    <!-- 🎬 EDITOR INTERFACE -->
     <div class="editor-interface" id="editor-view">
         <div class="controls">
             <label class="file-label" for="upload-pics">📷 Seleccionar Fotos</label>
@@ -280,7 +282,6 @@
             const newFiles = Array.from(e.target.files);
             if(newFiles.length === 0) return;
 
-            // Mapear archivos con ID único
             newFiles.forEach(file => {
                 const uniqueFileId = 'img_' + Math.random().toString(36).substr(2, 9);
                 allLoadedFiles.push({
@@ -294,14 +295,11 @@
                 });
             });
 
-            // 🌟 Limpiar el input para que permita re-seleccionar sin provocar errores en cadena
             fileInput.value = "";
-
             renderWorkspace();
         });
 
         function renderWorkspace() {
-            // 🌟 Respaldar textos E transformaciones antes de reconstruir las grillas
             allLoadedFiles.forEach(item => {
                 const inputEl = document.getElementById('input-' + item.id);
                 const imgEl = document.getElementById('img-' + item.id);
@@ -379,7 +377,8 @@
                     item.srcData = event.target.result;
                     renderImageToCard(item.srcData, uniqueId, item.text, item);
                 };
-                reader.readAsDataURL(fileObject || item.fileObject);
+                // 🌟 CORREGIDO: Lectura limpia desde el objeto estructurado nativo
+                reader.readAsDataURL(item.fileObject); 
             }
         }
 
@@ -413,7 +412,6 @@
             img.style.width = (iWidth * renderScale) + 'px';
             img.style.height = (iHeight * renderScale) + 'px';
 
-            // 🌟 Recuperar coordenadas de zoom y arrastre previas si ya existían
             img.dataset.zoom = item.zoom || "1";
             img.dataset.x = item.x || "0";
             img.dataset.y = item.y || "0";
@@ -491,7 +489,6 @@
                 if (currentY > maxH) currentY = maxH;
                 if (currentY < -maxH) currentY = -maxH;
 
-                // 🌟 Guardar la posición viva en los atributos para el siguiente re-render
                 img.dataset.zoom = currentZoom;
                 img.dataset.x = currentX;
                 img.dataset.y = currentY;
@@ -500,24 +497,19 @@
             }
         }
 
-        // 🌟 Sincronización impecable al remover fotos
         function removePhoto(event, idToKill) {
             event.stopPropagation(); 
             event.preventDefault();
 
-            // 1. Remover visualmente del lienzo al momento
             const cardElement = document.getElementById(`card-holder-${idToKill}`);
             if (cardElement) { cardElement.remove(); }
 
-            // 2. Remover del arreglo global de persistencia para evitar baches
             allLoadedFiles = allLoadedFiles.filter(item => item.id !== idToKill);
 
-            // 3. Recalcular contadores
             const totalPhotos = allLoadedFiles.length;
             const totalSheets = Math.ceil(totalPhotos / photosPerPage);
             counterBadge.textContent = `${totalPhotos} fotos / ${totalSheets} ${totalSheets === 1 ? 'hoja' : 'hojas'}`;
 
-            // 4. Limpieza de hojas que queden en ceros
             document.querySelectorAll('.page-canvas').forEach((canvas) => {
                 const innerGrid = canvas.querySelector('.polaroid-grid');
                 if (innerGrid && innerGrid.children.length === 0) {
