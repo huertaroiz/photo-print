@@ -476,7 +476,7 @@
             }
         }
 
-        // 🌟 CORRECCIÓN CRÍTICA: event.stopPropagation() congela el clic en la X para que no borre todo
+        // 🌟 CORRECCIÓN CRÍTICA BLINDADA: event.stopPropagation() congela el clic en la X para que no borre todo
         function removePhoto(event, idToKill) {
             event.stopPropagation(); 
             allLoadedFiles = allLoadedFiles.filter(item => item.id !== idToKill);
