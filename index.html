@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Photo Print Studio v18</title>
+    <title>Photo Print Studio v17.1</title>
     <style>
         *, *::before, *::after {
             box-sizing: border-box;
@@ -281,7 +281,9 @@
             if(newFiles.length === 0) return;
 
             newFiles.forEach(file => {
+                const uniqueFileId = 'img_' + Math.random().toString(36).substr(2, 9);
                 allLoadedFiles.push({
+                    id: uniqueFileId,
                     fileObject: file,
                     srcData: null,
                     text: '',
@@ -296,10 +298,9 @@
         });
 
         function renderWorkspace() {
-            // 🌟 RESPALDO ABSOLUTO POR ÍNDICE NUMÉRICO CONSTANTE
-            allLoadedFiles.forEach((item, index) => {
-                const inputEl = document.getElementById('input-' + index);
-                const imgEl = document.getElementById('img-' + index);
+            allLoadedFiles.forEach(item => {
+                const inputEl = document.getElementById('input-' + item.id);
+                const imgEl = document.getElementById('img-' + item.id);
                 if (inputEl) { item.text = inputEl.value; }
                 if (imgEl) {
                     item.zoom = imgEl.dataset.zoom || 1;
@@ -318,6 +319,7 @@
             for (let s = 1; s <= totalSheets; s++) {
                 const pageCanvas = document.createElement('div');
                 pageCanvas.classList.add('page-canvas');
+                pageCanvas.id = `page-sheet-${s}`;
                 
                 const pageTag = document.createElement('div');
                 pageTag.classList.add('page-indicator-tag');
@@ -326,12 +328,13 @@
 
                 const polaroidGrid = document.createElement('div');
                 polaroidGrid.classList.add('polaroid-grid');
+                polaroidGrid.id = `grid-sheet-${s}`;
 
                 for (let p = 1; p <= photosPerPage; p++) {
                     if (fileIndex >= totalPhotos) break;
 
                     const currentItem = allLoadedFiles[fileIndex];
-                    const globalIdx = fileIndex; 
+                    const uniqueId = currentItem.id;
                     
                     let maxChars = 45;
                     if (currentMode === 'mediana') maxChars = 60;
@@ -340,19 +343,21 @@
 
                     const card = document.createElement('div');
                     card.classList.add('polaroid-card');
+                    card.id = `card-holder-${uniqueId}`;
                     card.innerHTML = `
-                        <div class="photo-container" id="container-${globalIdx}">
-                            <div class="delete-btn" onclick="removePhoto(event, ${globalIdx})">×</div>
-                            <img id="img-${globalIdx}" src="">
+                        <div class="photo-container" id="container-${uniqueId}">
+                            <div class="delete-btn" onclick="removePhoto(event, '${uniqueId}')">×</div>
+                            <img id="img-${uniqueId}" src="">
                         </div>
                         <div class="text-container">
-                            <input type="text" class="polaroid-input" id="input-${globalIdx}" maxlength="${maxChars}" placeholder="Escribe..." oninput="document.getElementById('c-${globalIdx}').textContent = this.value.length + '/${maxChars}'">
-                            <span class="char-counter" id="c-${globalIdx}">0/${maxChars}</span>
+                            <input type="text" class="polaroid-input" id="input-${uniqueId}" maxlength="${maxChars}" placeholder="Escribe..." oninput="document.getElementById('c-${uniqueId}').textContent = this.value.length + '/${maxChars}'">
+                            <span class="char-counter" id="c-${uniqueId}">0/${maxChars}</span>
                         </div>
                     `;
 
                     polaroidGrid.appendChild(card);
-                    loadImageData(currentItem, globalIdx);
+                    currentItem.assignedUniqueId = uniqueId;
+                    loadImageData(currentItem, uniqueId);
                     fileIndex++;
                 }
 
@@ -361,32 +366,32 @@
             }
         }
 
-        function loadImageData(item, globalIdx) {
+        function loadImageData(item, uniqueId) {
             if (item.srcData) {
-                renderImageToCard(item.srcData, globalIdx, item.text, item);
+                renderImageToCard(item.srcData, uniqueId, item.text, item);
             } else {
                 const reader = new FileReader();
                 reader.onload = function(event) {
                     item.srcData = event.target.result;
-                    renderImageToCard(item.srcData, globalIdx, item.text, item);
+                    renderImageToCard(item.srcData, uniqueId, item.text, item);
                 };
                 reader.readAsDataURL(item.fileObject); 
             }
         }
 
-        function renderImageToCard(src, globalIdx, textValue, item) {
-            const img = document.getElementById(`img-${globalIdx}`);
-            const input = document.getElementById(`input-${globalIdx}`);
+        function renderImageToCard(src, uniqueId, textValue, item) {
+            const img = document.getElementById(`img-${uniqueId}`);
+            const input = document.getElementById(`input-${uniqueId}`);
             if(!img) return;
 
             img.src = src;
             if(textValue && input) {
                 input.value = textValue;
-                document.getElementById(`c-${globalIdx}`).textContent = `${textValue.length}/${input.maxLength}`;
+                document.getElementById(`c-${uniqueId}`).textContent = `${textValue.length}/${input.maxLength}`;
             }
 
             img.onload = function() {
-                const container = document.getElementById(`container-${globalIdx}`);
+                const container = document.getElementById(`container-${uniqueId}`);
                 initializeSecureDimensions(container, img, item);
             };
         }
@@ -489,21 +494,21 @@
             }
         }
 
-        // 🌟 ELIMINACIÓN ASOCIADA AL ARREGLO GLOBAL RE-SINCRONIZADO
-        function removePhoto(event, indexToKill) {
+        // 🌟 CORRECCIÓN INTEGRAL DE MEMORIA: Respalda textos dinámicamente antes de limpiar
+        function removePhoto(event, idToKill) {
             event.stopPropagation(); 
             event.preventDefault();
 
-            // Guardar textos vivos de la pantalla antes de limpiar la lista
-            allLoadedFiles.forEach((item, index) => {
-                const inputEl = document.getElementById('input-' + index);
+            // 1. Guardar todos los textos actuales de la pantalla en la memoria del arreglo antes del cambio
+            allLoadedFiles.forEach(item => {
+                const inputEl = document.getElementById('input-' + item.id);
                 if (inputEl) { item.text = inputEl.value; }
             });
 
-            // Eliminar elemento del arreglo por su índice real
-            allLoadedFiles.splice(indexToKill, 1);
+            // 2. Filtrar el arreglo global para descartar únicamente la foto tachada
+            allLoadedFiles = allLoadedFiles.filter(item => item.id !== idToKill);
 
-            // Re-renderizar el lienzo completo de forma segura
+            // 3. Volver a renderizar la grilla con los datos limpios y textos sincronizados
             renderWorkspace();
         }
     </script>
