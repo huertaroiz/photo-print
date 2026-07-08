@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Photo Print Studio v10</title>
+    <title>Photo Print Studio v11</title>
     <style>
         *, *::before, *::after {
             box-sizing: border-box;
@@ -46,7 +46,7 @@
         .size-card h3 { margin: 0 0 6px 0; font-size: 16px; color: #1e293b; font-weight: 700; }
         .size-card p { margin: 0 0 4px 0; font-size: 13px; color: #64748b; }
 
-        /* --- INTERFAZ DEL EDITOR (MÁS LIMPIA SIN STICKY) --- */
+        /* --- INTERFAZ DEL EDITOR --- */
         .editor-interface { display: none; }
 
         .controls {
@@ -59,7 +59,6 @@
             display: flex;
             flex-direction: column;
             gap: 12px;
-            /* 🌟 Corregido: Ya no estorba al deslizarse hacia abajo */
             position: relative; 
         }
 
@@ -97,16 +96,20 @@
         .polaroid-grid { display: flex; flex-direction: column; gap: 15px; }
         .polaroid-card { background-color: #ffffff; border: 1px solid #e0e0e0; position: relative; width: 100%; border-radius: 2px; }
 
-        /* Ajustes de Imagen */
+        /* Ajustes de Imagen y Transformación */
         .photo-container { width: 100%; background-color: #f7f7f7; overflow: hidden; position: relative; cursor: grab; user-select: none; touch-action: none; }
         .photo-container:active { cursor: grabbing; }
         
-        /* 🌟 Posicionamiento basado en object-position porcentual para blindar la impresión */
+        /* Modificado para soportar transformaciones combinadas de escala y traslación libre */
         .photo-container img { 
+            position: absolute;
+            top: 50%;
+            left: 50%;
             width: 100%;
             height: 100%;
             object-fit: cover;
-            object-position: 50% 50%;
+            transform: translate(-50%, -50%) scale(1);
+            transform-origin: center center;
             pointer-events: none; 
             filter: sepia(0.06) saturate(1.1) contrast(0.88) brightness(1.08); 
         }
@@ -152,19 +155,16 @@
             .polaroid-input::placeholder { color: transparent !important; opacity: 0 !important; }
             .polaroid-input { font-size: 11pt !important; }
 
-            /* RECTANGULAR: 6 por hoja */
             .mode-rectangular .polaroid-card { width: 9.6cm !important; height: 8.4cm !important; padding: 0.4cm 0.4cm 1.5cm 0.4cm !important; margin-right: 0.5cm !important; margin-bottom: 0.35cm !important; }
             .mode-rectangular .polaroid-card:nth-child(2n) { margin-right: 0 !important; }
             .mode-rectangular .photo-container { width: 8.8cm !important; height: 6.5cm !important; }
             .mode-rectangular .text-container { height: 1.4cm !important; }
 
-            /* MEDIANA: 4 por hoja */
             .mode-mediana .polaroid-card { width: 8.8cm !important; height: 10.8cm !important; padding: 0.45cm 0.45cm 2.45cm 0.45cm !important; margin-right: 1.2cm !important; margin-bottom: 1.2cm !important; }
             .mode-mediana .polaroid-card:nth-child(2n) { margin-right: 0 !important; }
             .mode-mediana .photo-container { width: 7.9cm !important; height: 7.9cm !important; margin: 0 auto !important; }
             .mode-mediana .text-container { height: 2.3cm !important; }
 
-            /* MINI VERTICAL: 9 por hoja */
             .mode-mini .polaroid-card { 
                 width: 6.4cm !important; 
                 height: 8.7cm !important; 
@@ -176,7 +176,6 @@
             .mode-mini .photo-container { width: 5.4cm !important; height: 6.3cm !important; margin: 0 auto !important; }
             .mode-mini .text-container { height: 1.7cm !important; }
 
-            /* MICRO: 12 por hoja */
             .mode-micro .polaroid-card { width: 5.9cm !important; height: 6.3cm !important; padding: 0.3cm 0.3cm 1.3cm 0.3cm !important; margin-right: 0.9cm !important; margin-bottom: 0.15cm !important; }
             .mode-micro .polaroid-card:nth-child(3n) { margin-right: 0 !important; }
             .mode-micro .photo-container { width: 4.4cm !important; height: 4.4cm !important; margin: 0 auto !important; }
@@ -232,6 +231,8 @@
     <script>
         let currentMode = 'rectangular';
         let photosPerPage = 6;
+        let allLoadedFiles = []; // Memoria global acumulativa para guardar los archivos
+        
         const homeView = document.getElementById('home-view');
         const editorView = document.getElementById('editor-view');
         const workspace = document.getElementById('print-workspace');
@@ -247,15 +248,34 @@
             counterBadge.textContent = `0 fotos / 0 hojas`;
             workspace.innerHTML = '';
             fileInput.value = '';
+            allLoadedFiles = []; 
         }
 
-        function goHome() { homeView.style.display = 'block'; editorView.style.display = 'none'; workspace.innerHTML = ''; }
+        function goHome() { 
+            homeView.style.display = 'block'; 
+            editorView.style.display = 'none'; 
+            workspace.innerHTML = ''; 
+            allLoadedFiles = [];
+        }
 
         fileInput.addEventListener('change', function(e) {
-            const files = Array.from(e.target.files);
-            if(files.length === 0) return;
+            const newFiles = Array.from(e.target.files);
+            if(newFiles.length === 0) return;
 
-            const totalPhotos = files.length;
+            // 🌟 Sumar las fotos nuevas al final de las viejas en vez de borrar todo
+            allLoadedFiles = allLoadedFiles.concat(newFiles);
+
+            renderWorkspace();
+        });
+
+        function renderWorkspace() {
+            // Guardar textos existentes en memoria temporal antes de re-dibujar
+            const savedTexts = {};
+            document.querySelectorAll('.polaroid-input').forEach(input => {
+                savedTexts[input.id] = input.value;
+            });
+
+            const totalPhotos = allLoadedFiles.length;
             const totalSheets = Math.ceil(totalPhotos / photosPerPage);
             counterBadge.textContent = `${totalPhotos} fotos / ${totalSheets} ${totalSheets === 1 ? 'hoja' : 'hojas'}`;
 
@@ -277,7 +297,7 @@
                 for (let p = 1; p <= photosPerPage; p++) {
                     if (fileIndex >= totalPhotos) break;
 
-                    const currentFile = files[fileIndex];
+                    const currentFile = allLoadedFiles[fileIndex];
                     const uniqueId = `s${s}-p${p}`;
                     
                     let maxChars = 45;
@@ -292,73 +312,79 @@
                             <img id="img-${uniqueId}" src="">
                         </div>
                         <div class="text-container">
-                            <input type="text" class="polaroid-input" maxlength="${maxChars}" placeholder="Escribe..." oninput="document.getElementById('c-${uniqueId}').textContent = this.value.length + '/${maxChars}'">
+                            <input type="text" class="polaroid-input" id="input-${uniqueId}" maxlength="${maxChars}" placeholder="Escribe..." oninput="document.getElementById('c-${uniqueId}').textContent = this.value.length + '/${maxChars}'">
                             <span class="char-counter" id="c-${uniqueId}">0/${maxChars}</span>
                         </div>
                     `;
 
                     polaroidGrid.appendChild(card);
-                    setupImageReader(currentFile, uniqueId);
+                    setupImageReader(currentFile, uniqueId, savedTexts[`input-${uniqueId}`]);
                     fileIndex++;
                 }
 
                 pageCanvas.appendChild(polaroidGrid);
                 workspace.appendChild(pageCanvas);
             }
-        });
+        }
 
-        function setupImageReader(file, uniqueId) {
+        function setupImageReader(file, uniqueId, oldText) {
             const reader = new FileReader();
             reader.onload = function(event) {
                 const img = document.getElementById(`img-${uniqueId}`);
+                const input = document.getElementById(`input-${uniqueId}`);
+                
                 if(img) {
                     img.src = event.target.result;
-                    img.onload = function() {
-                        // Inicializar valores de control de posición basados en %
-                        img.dataset.pctX = "50";
-                        img.dataset.pctY = "50";
-                        img.dataset.zoom = "1";
-                        enableSecureTouch(document.getElementById(`container-${uniqueId}`), img);
-                    };
+                    if(oldText) {
+                        input.value = oldText;
+                        document.getElementById(`c-${uniqueId}`).textContent = `${oldText.length}/${input.maxLength}`;
+                    }
+                    
+                    // Inicializar estados nativos libres
+                    img.dataset.zoom = "1";
+                    img.dataset.x = "0";
+                    img.dataset.y = "0";
+                    enableFreeTransform(document.getElementById(`container-${uniqueId}`), img);
                 }
             };
             reader.readAsDataURL(file);
         }
 
-        // Nuevo motor de gestos blindado mediante porcentajes
-        function enableSecureTouch(container, img) {
+        // 🌟 Motor de Movimiento y Zoom Rediseñado: Libertad Total de traslación
+        function enableFreeTransform(container, img) {
             let isDragging = false;
             let startX = 0, startY = 0;
-            let currentPctX = 50;
-            let currentPctY = 50;
+            let currentX = 0, currentY = 0;
             let currentZoom = 1;
             let initialDistance = 0;
 
-            // --- CONTROLES DE MOUSE ---
+            // --- RATÓN (PC) ---
             container.addEventListener('mousedown', (e) => {
                 isDragging = true;
-                startX = e.clientX;
-                startY = e.clientY;
+                startX = e.clientX - currentX;
+                startY = e.clientY - currentY;
             });
             window.addEventListener('mouseup', () => { isDragging = false; });
             container.addEventListener('mousemove', (e) => {
                 if (!isDragging) return;
-                moveLogic(e.clientX, e.clientY);
+                currentX = e.clientX - startX;
+                currentY = e.clientY - startY;
+                applyTransform();
             });
             container.addEventListener('wheel', (e) => {
                 e.preventDefault();
                 if (e.deltaY < 0) { currentZoom += 0.08; } else { currentZoom -= 0.08; }
                 if (currentZoom < 1) currentZoom = 1;
                 if (currentZoom > 4) currentZoom = 4;
-                updateTransform();
+                applyTransform();
             }, { passive: false });
 
-            // --- CONTROLES TÁCTILES ---
+            // --- TÁCTIL (MÓVIL) ---
             container.addEventListener('touchstart', (e) => {
                 if (e.touches.length === 1) {
                     isDragging = true;
-                    startX = e.touches[0].clientX;
-                    startY = e.touches[0].clientY;
+                    startX = e.touches[0].clientX - currentX;
+                    startY = e.touches[0].clientY - currentY;
                 } else if (e.touches.length === 2) {
                     isDragging = false;
                     initialDistance = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
@@ -367,7 +393,9 @@
 
             container.addEventListener('touchmove', (e) => {
                 if (e.touches.length === 1 && isDragging) {
-                    moveLogic(e.touches[0].clientX, e.touches[0].clientY);
+                    currentX = e.touches[0].clientX - startX;
+                    currentY = e.touches[0].clientY - startY;
+                    applyTransform();
                 } else if (e.touches.length === 2) {
                     const currentDistance = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
                     const factor = currentDistance / initialDistance;
@@ -375,34 +403,19 @@
                     if (targetZoom >= 1 && targetZoom <= 4) {
                         currentZoom = targetZoom;
                         initialDistance = currentDistance;
-                        updateTransform();
+                        applyTransform();
                     }
                 }
             }, { passive: true });
 
             container.addEventListener('touchend', () => { isDragging = false; });
 
-            function moveLogic(clientX, clientY) {
-                const deltaX = startX - clientX;
-                const deltaY = startY - clientY;
-                startX = clientX;
-                startY = clientY;
-
-                // Ajustar sensibilidad dividida por el nivel de zoom
-                currentPctX += (deltaX / container.clientWidth) * 100 / currentZoom;
-                currentPctY += (deltaY / container.clientHeight) * 100 / currentZoom;
-
-                // Limitar entre 0% y 100% para no salirnos de la foto
-                currentPctX = Math.max(0, Math.min(100, currentPctX));
-                currentPctY = Math.max(0, Math.min(100, currentPctY));
-
-                updateTransform();
-            }
-
-            function updateTransform() {
-                // Modifica la posición y escala de forma nativa e idéntica en pantalla e impresión
-                img.style.objectPosition = `${currentPctX}% ${currentPctY}%`;
-                img.style.transform = `scale(${currentZoom})`;
+            function applyTransform() {
+                // Si la escala regresa a 1, centramos automáticamente la foto para evitar huecos
+                if (currentZoom === 1) { currentX = 0; currentY = 0; }
+                
+                // Mueve la foto usando traslaciones reales en conjunto con el zoom
+                img.style.transform = `translate(calc(-50% + ${currentX}px), calc(-50% + ${currentY}px)) scale(${currentZoom})`;
             }
         }
     </script>
