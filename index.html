@@ -96,11 +96,10 @@
         .polaroid-grid { display: flex; flex-direction: column; gap: 15px; }
         .polaroid-card { background-color: #ffffff; border: 1px solid #e0e0e0; position: relative; width: 100%; border-radius: 2px; }
 
-        /* Ajustes de Imagen con Libertad de Movimiento Absoluta */
+        /* Contenedor de Imagen */
         .photo-container { width: 100%; background-color: #f7f7f7; overflow: hidden; position: relative; cursor: grab; user-select: none; touch-action: none; }
         .photo-container:active { cursor: grabbing; }
         
-        /* Eliminamos el object-fit restrictivo para manejar el redimensionamiento dinámico vía JS */
         .photo-container img { 
             position: absolute;
             top: 50%;
@@ -345,23 +344,19 @@
             reader.readAsDataURL(file);
         }
 
-        // 🌟 Inicialización matemática basada en dimensiones crudas para liberar el arrastre
         function initializeSecureDimensions(container, img) {
             const cWidth = container.clientWidth;
             const cHeight = container.clientHeight;
             const iWidth = img.naturalWidth;
             const iHeight = img.naturalHeight;
 
-            // Encontrar la escala base exacta para rellenar la caja simétricamente
             const scaleX = cWidth / iWidth;
             const scaleY = cHeight / iHeight;
             const renderScale = Math.max(scaleX, scaleY);
 
-            // Redimensionar la imagen de forma nativa rompiendo el object-fit restrictivo
             img.style.width = (iWidth * renderScale) + 'px';
             img.style.height = (iHeight * renderScale) + 'px';
 
-            // Guardar datos base de control
             img.dataset.zoom = "1";
             img.dataset.x = "0";
             img.dataset.y = "0";
@@ -430,16 +425,16 @@
             container.addEventListener('touchend', () => { isDragging = false; });
 
             function applyTransform() {
-                // Si la escala regresa a 1, limita el movimiento para que no deje bordes vacíos
-                const maxW = (img.clientWidth * currentZoom - container.clientWidth) / 2;
-                const maxH = (img.clientHeight * currentZoom - container.clientHeight) / 2;
+                // 🌟 CORRECCIÓN CRÍTICA: Quitamos el candado que congelaba los lados al estar en escala 1.
+                // Ahora calcula los límites de desborde reales de la foto permitiendo mover horizontalmente 
+                // si la foto es más ancha que el contenedor, o verticalmente si es más alta.
+                const maxW = Math.max(0, (img.clientWidth * currentZoom - container.clientWidth) / 2);
+                const maxH = Math.max(0, (img.clientHeight * currentZoom - container.clientHeight) / 2);
 
                 if (currentX > maxW) currentX = maxW;
                 if (currentX < -maxW) currentX = -maxW;
                 if (currentY > maxH) currentY = maxH;
                 if (currentY < -maxH) currentY = -maxH;
-                
-                if (currentZoom === 1) { currentX = 0; currentY = 0; }
 
                 img.style.transform = `translate(calc(-50% + ${currentX}px), calc(-50% + ${currentY}px)) scale(${currentZoom})`;
             }
