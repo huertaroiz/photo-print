@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Photo Print Studio v15</title>
+    <title>Photo Print Studio v16</title>
     <style>
         *, *::before, *::after {
             box-sizing: border-box;
@@ -108,12 +108,11 @@
             transform: translate(-50%, -50%) scale(1);
             transform-origin: center center;
             pointer-events: none; 
-            /* Filtros optimizados contra oscuridad HP */
             filter: sepia(0.06) saturate(1.1) contrast(0.88) brightness(1.08); 
         }
         .photo-container::after { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(245, 222, 179, 0.03); pointer-events: none; }
         
-        /* Botón Eliminar Foto Estilizado */
+        /* Botón Eliminar Foto */
         .delete-btn {
             position: absolute;
             top: 8px;
@@ -204,7 +203,6 @@
 </head>
 <body>
 
-    <!-- 🏠 HOME SCREEN -->
     <div class="home-screen" id="home-view">
         <h1>Photo Print Studio</h1>
         <p>Elige el formato de impresión para tu plantilla</p>
@@ -234,7 +232,6 @@
         </div>
     </div>
 
-    <!-- 🎬 EDITOR INTERFACE -->
     <div class="editor-interface" id="editor-view">
         <div class="controls">
             <label class="file-label" for="upload-pics">📷 Seleccionar Fotos</label>
@@ -283,23 +280,37 @@
             const newFiles = Array.from(e.target.files);
             if(newFiles.length === 0) return;
 
+            // Mapear archivos con ID único
             newFiles.forEach(file => {
                 const uniqueFileId = 'img_' + Math.random().toString(36).substr(2, 9);
                 allLoadedFiles.push({
                     id: uniqueFileId,
                     fileObject: file,
                     srcData: null,
-                    text: ''
+                    text: '',
+                    zoom: 1,
+                    x: 0,
+                    y: 0
                 });
             });
+
+            // 🌟 Limpiar el input para que permita re-seleccionar sin provocar errores en cadena
+            fileInput.value = "";
 
             renderWorkspace();
         });
 
         function renderWorkspace() {
+            // 🌟 Respaldar textos E transformaciones antes de reconstruir las grillas
             allLoadedFiles.forEach(item => {
                 const inputEl = document.getElementById('input-' + item.id);
+                const imgEl = document.getElementById('img-' + item.id);
                 if (inputEl) { item.text = inputEl.value; }
+                if (imgEl) {
+                    item.zoom = imgEl.dataset.zoom || 1;
+                    item.x = imgEl.dataset.x || 0;
+                    item.y = imgEl.dataset.y || 0;
+                }
             });
 
             const totalPhotos = allLoadedFiles.length;
@@ -361,18 +372,18 @@
 
         function loadImageData(item, uniqueId) {
             if (item.srcData) {
-                renderImageToCard(item.srcData, uniqueId, item.text);
+                renderImageToCard(item.srcData, uniqueId, item.text, item);
             } else {
                 const reader = new FileReader();
                 reader.onload = function(event) {
                     item.srcData = event.target.result;
-                    renderImageToCard(item.srcData, uniqueId, item.text);
+                    renderImageToCard(item.srcData, uniqueId, item.text, item);
                 };
-                reader.readAsDataURL(item.fileObject);
+                reader.readAsDataURL(fileObject || item.fileObject);
             }
         }
 
-        function renderImageToCard(src, uniqueId, textValue) {
+        function renderImageToCard(src, uniqueId, textValue, item) {
             const img = document.getElementById(`img-${uniqueId}`);
             const input = document.getElementById(`input-${uniqueId}`);
             if(!img) return;
@@ -385,11 +396,11 @@
 
             img.onload = function() {
                 const container = document.getElementById(`container-${uniqueId}`);
-                initializeSecureDimensions(container, img);
+                initializeSecureDimensions(container, img, item);
             };
         }
 
-        function initializeSecureDimensions(container, img) {
+        function initializeSecureDimensions(container, img, item) {
             const cWidth = container.clientWidth;
             const cHeight = container.clientHeight;
             const iWidth = img.naturalWidth;
@@ -402,19 +413,21 @@
             img.style.width = (iWidth * renderScale) + 'px';
             img.style.height = (iHeight * renderScale) + 'px';
 
-            img.dataset.zoom = "1";
-            img.dataset.x = "0";
-            img.dataset.y = "0";
+            // 🌟 Recuperar coordenadas de zoom y arrastre previas si ya existían
+            img.dataset.zoom = item.zoom || "1";
+            img.dataset.x = item.x || "0";
+            img.dataset.y = item.y || "0";
             
-            img.style.transform = "translate(-50%, -50%) scale(1)";
+            img.style.transform = `translate(calc(-50% + ${img.dataset.x}px), calc(-50% + ${img.dataset.y}px)) scale(${img.dataset.zoom})`;
             enableFreeTransform(container, img);
         }
 
         function enableFreeTransform(container, img) {
             let isDragging = false;
             let startX = 0, startY = 0;
-            let currentX = 0, currentY = 0;
-            let currentZoom = 1;
+            let currentX = parseFloat(img.dataset.x) || 0;
+            let currentY = parseFloat(img.dataset.y) || 0;
+            let currentZoom = parseFloat(img.dataset.zoom) || 1;
             let initialDistance = 0;
 
             container.addEventListener('mousedown', (e) => {
@@ -478,28 +491,33 @@
                 if (currentY > maxH) currentY = maxH;
                 if (currentY < -maxH) currentY = -maxH;
 
+                // 🌟 Guardar la posición viva en los atributos para el siguiente re-render
+                img.dataset.zoom = currentZoom;
+                img.dataset.x = currentX;
+                img.dataset.y = currentY;
+
                 img.style.transform = `translate(calc(-50% + ${currentX}px), calc(-50% + ${currentY}px)) scale(${currentZoom})`;
             }
         }
 
-        // 🌟 RE-DISEÑO ABSOLUTO DE ELIMINACIÓN TÁCTIL (v15): Evita colapsos de memoria
+        // 🌟 Sincronización impecable al remover fotos
         function removePhoto(event, idToKill) {
             event.stopPropagation(); 
             event.preventDefault();
 
-            // 1. Encontrar y destruir la tarjeta en la pantalla inmediatamente (.remove)
+            // 1. Remover visualmente del lienzo al momento
             const cardElement = document.getElementById(`card-holder-${idToKill}`);
             if (cardElement) { cardElement.remove(); }
 
-            // 2. Sacar la foto del arreglo interno en silencio sin re-renderizar
+            // 2. Remover del arreglo global de persistencia para evitar baches
             allLoadedFiles = allLoadedFiles.filter(item => item.id !== idToKill);
 
-            // 3. Re-calcular contadores generales e indicadores de hojas al momento
+            // 3. Recalcular contadores
             const totalPhotos = allLoadedFiles.length;
             const totalSheets = Math.ceil(totalPhotos / photosPerPage);
             counterBadge.textContent = `${totalPhotos} fotos / ${totalSheets} ${totalSheets === 1 ? 'hoja' : 'hojas'}`;
 
-            // 4. Limpieza de lienzos vacíos (si una página se queda en 0 fotos, se elimina la hoja completa)
+            // 4. Limpieza de hojas que queden en ceros
             document.querySelectorAll('.page-canvas').forEach((canvas) => {
                 const innerGrid = canvas.querySelector('.polaroid-grid');
                 if (innerGrid && innerGrid.children.length === 0) {
