@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Photo Print Studio v10</title>
+    <style>
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f4f6f9;
+            margin: 0;
+            padding: 15px;
+            color: #333;
+        }
+
+        /* --- PANTALLA DE INICIO (HOME) --- */
+        .home-screen {
+            max-width: 480px;
+            margin: 30px auto;
+            background: white;
+            padding: 30px 20px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+            text-align: center;
+        }
+
+        .home-screen h1 { font-size: 24px; margin-bottom: 5px; color: #2c3e50; font-weight: 800; }
+        .home-screen p { color: #7f8c8d; font-size: 14px; margin-bottom: 25px; }
+
+        .size-card {
+            background: #f8fafc;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 12px;
+            cursor: pointer;
+            text-align: left;
+            transition: all 0.2s ease;
+        }
+
+        .size-card:hover { border-color: #4A90E2; background-color: #f0f7ff; }
+        .size-card h3 { margin: 0 0 6px 0; font-size: 16px; color: #1e293b; font-weight: 700; }
+        .size-card p { margin: 0 0 4px 0; font-size: 13px; color: #64748b; }
+
+        /* --- INTERFAZ DEL EDITOR (MÁS LIMPIA SIN STICKY) --- */
+        .editor-interface { display: none; }
+
+        .controls {
+            background-color: #ffffff;
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            max-width: 480px;
+            margin: 0 auto 25px auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            /* 🌟 Corregido: Ya no estorba al deslizarse hacia abajo */
+            position: relative; 
+        }
+
+        .btn {
+            width: 100%; padding: 14px; border-radius: 8px;
+            font-size: 16px; font-weight: bold; cursor: pointer;
+            border: none; text-align: center; display: block;
+        }
+        .btn-success { background-color: #2ECC71; color: white; }
+        .btn-outline { background-color: transparent; border: 2px solid #cbd5e1; color: #64748b; margin-top: 5px; padding: 10px; font-size: 14px;}
+
+        .file-label {
+            width: 100%; padding: 14px; background-color: #4A90E2; color: white;
+            border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 16px; text-align: center; display: block;
+        }
+        input[type="file"] { display: none; }
+
+        .status-badge {
+            background-color: #e8f4fd; color: #2980b9; padding: 8px;
+            border-radius: 6px; text-align: center; font-size: 14px; font-weight: bold; border: 1px dashed #3498db;
+        }
+
+        .workspace { display: flex; flex-direction: column; gap: 25px; align-items: center; }
+
+        .page-canvas {
+            background-color: #ffffff; width: 100%; max-width: 450px;
+            padding: 15px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); position: relative;
+        }
+
+        .page-indicator-tag {
+            font-size: 11px; color: #aaa; text-transform: uppercase;
+            letter-spacing: 1px; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px;
+        }
+
+        .polaroid-grid { display: flex; flex-direction: column; gap: 15px; }
+        .polaroid-card { background-color: #ffffff; border: 1px solid #e0e0e0; position: relative; width: 100%; border-radius: 2px; }
+
+        /* Ajustes de Imagen */
+        .photo-container { width: 100%; background-color: #f7f7f7; overflow: hidden; position: relative; cursor: grab; user-select: none; touch-action: none; }
+        .photo-container:active { cursor: grabbing; }
+        
+        /* 🌟 Posicionamiento basado en object-position porcentual para blindar la impresión */
+        .photo-container img { 
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: 50% 50%;
+            pointer-events: none; 
+            filter: sepia(0.06) saturate(1.1) contrast(0.88) brightness(1.08); 
+        }
+        .photo-container::after { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(245, 222, 179, 0.03); pointer-events: none; }
+        
+        .text-container { position: absolute; bottom: 0; left: 0; width: 100%; padding: 8px 12px; display: flex; flex-direction: column; justify-content: center; }
+        .polaroid-input { width: 100%; border: none; background: transparent; text-align: center; font-family: 'Courier New', Courier, monospace; font-size: 15px; font-weight: bold; color: #2b2b2b; outline: none; }
+        .char-counter { position: absolute; right: 10px; bottom: 4px; font-size: 9px; color: #bbb; }
+
+        /* VISTAS EN PANTALLA MÓVIL */
+        .mode-rectangular .polaroid-card { padding: 12px 12px 65px 12px; }
+        .mode-rectangular .photo-container { aspect-ratio: 4 / 3; }
+        .mode-rectangular .text-container { height: 65px; }
+
+        .mode-mediana .polaroid-card { padding: 15px 15px 75px 15px; }
+        .mode-mediana .photo-container { aspect-ratio: 1 / 1; width: 85%; margin: 0 auto; }
+        .mode-mediana .text-container { height: 75px; }
+
+        .mode-mini .polaroid-card { padding: 12px 12px 70px 12px; }
+        .mode-mini .photo-container { aspect-ratio: 46 / 62; width: 65%; margin: 0 auto; }
+        .mode-mini .text-container { height: 70px; }
+
+        .mode-micro .polaroid-card { padding: 12px 12px 55px 12px; }
+        .mode-micro .photo-container { aspect-ratio: 1 / 1; width: 55%; margin: 0 auto; }
+        .mode-micro .text-container { height: 55px; }
+
+
+        /* 🖨️ MOTOR IMPRESIÓN SEGURO */
+        @media print {
+            body { background: none; padding: 0; margin: 0; }
+            .controls, .char-counter, .page-indicator-tag, .home-screen { display: none !important; }
+            .editor-interface { display: block !important; }
+            .workspace { display: block !important; gap: 0 !important; }
+            
+            .page-canvas {
+                background-color: #ffffff !important; width: 21.59cm !important; height: 27.94cm !important;
+                padding: 0.8cm 0.8cm !important; max-width: none !important; box-shadow: none !important;
+                border-radius: 0 !important; page-break-inside: avoid !important; page-break-after: always !important; display: block !important;
+            }
+
+            .polaroid-grid { display: block !important; width: 100% !important; height: 100% !important; }
+            .polaroid-card { display: block !important; float: left !important; border: 1px solid #b5b5b5 !important; border-radius: 0 !important; box-shadow: none !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .polaroid-input::placeholder { color: transparent !important; opacity: 0 !important; }
+            .polaroid-input { font-size: 11pt !important; }
+
+            /* RECTANGULAR: 6 por hoja */
+            .mode-rectangular .polaroid-card { width: 9.6cm !important; height: 8.4cm !important; padding: 0.4cm 0.4cm 1.5cm 0.4cm !important; margin-right: 0.5cm !important; margin-bottom: 0.35cm !important; }
+            .mode-rectangular .polaroid-card:nth-child(2n) { margin-right: 0 !important; }
+            .mode-rectangular .photo-container { width: 8.8cm !important; height: 6.5cm !important; }
+            .mode-rectangular .text-container { height: 1.4cm !important; }
+
+            /* MEDIANA: 4 por hoja */
+            .mode-mediana .polaroid-card { width: 8.8cm !important; height: 10.8cm !important; padding: 0.45cm 0.45cm 2.45cm 0.45cm !important; margin-right: 1.2cm !important; margin-bottom: 1.2cm !important; }
+            .mode-mediana .polaroid-card:nth-child(2n) { margin-right: 0 !important; }
+            .mode-mediana .photo-container { width: 7.9cm !important; height: 7.9cm !important; margin: 0 auto !important; }
+            .mode-mediana .text-container { height: 2.3cm !important; }
+
+            /* MINI VERTICAL: 9 por hoja */
+            .mode-mini .polaroid-card { 
+                width: 6.4cm !important; 
+                height: 8.7cm !important; 
+                padding: 0.5cm 0.5cm 1.9cm 0.5cm !important; 
+                margin-right: 0.39cm !important; 
+                margin-bottom: 0.15cm !important; 
+            }
+            .mode-mini .polaroid-card:nth-child(3n) { margin-right: 0 !important; }
+            .mode-mini .photo-container { width: 5.4cm !important; height: 6.3cm !important; margin: 0 auto !important; }
+            .mode-mini .text-container { height: 1.7cm !important; }
+
+            /* MICRO: 12 por hoja */
+            .mode-micro .polaroid-card { width: 5.9cm !important; height: 6.3cm !important; padding: 0.3cm 0.3cm 1.3cm 0.3cm !important; margin-right: 0.9cm !important; margin-bottom: 0.15cm !important; }
+            .mode-micro .polaroid-card:nth-child(3n) { margin-right: 0 !important; }
+            .mode-micro .photo-container { width: 4.4cm !important; height: 4.4cm !important; margin: 0 auto !important; }
+            .mode-micro .text-container { height: 1.1cm !important; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="home-screen" id="home-view">
+        <h1>Photo Print Studio</h1>
+        <p>Elige el formato de impresión para tu plantilla</p>
+        
+        <div class="size-card" onclick="startEditor('rectangular', 6)">
+            <h3>Formato Rectangular</h3>
+            <p>• Tamaño foto interna: <b>8.9 x 6.5 cm</b> (Proporción 4:3)</p>
+            <p>• Cantidad: <b>6 fotos por hoja</b></p>
+        </div>
+
+        <div class="size-card" onclick="startEditor('mediana', 4)">
+            <h3>Formato Mediana (Escala Analógica)</h3>
+            <p>• Tamaño foto interna: <b>7.9 x 7.9 cm</b> (Cuadrado 1:1 Real)</p>
+            <p>• Cantidad: <b>4 fotos por hoja</b></p>
+        </div>
+
+        <div class="size-card" onclick="startEditor('mini', 9)">
+            <h3>Formato Mini Vertical</h3>
+            <p>• Tamaño foto interna: <b>5.4 x 6.3 cm</b> (Estilo tarjeta de bolsillo)</p>
+            <p>• Cantidad: <b>9 fotos por hoja</b></p>
+        </div>
+
+        <div class="size-card" onclick="startEditor('micro', 12)">
+            <h3>Formato Micro</h3>
+            <p>• Tamaño foto interna: <b>4.4 x 4.4 cm</b> (Cuadrado 1:1 Compacto)</p>
+            <p>• Cantidad: <b>12 fotos por hoja</b></p>
+        </div>
+    </div>
+
+    <div class="editor-interface" id="editor-view">
+        <div class="controls">
+            <label class="file-label" for="upload-pics">📷 Seleccionar Fotos</label>
+            <input type="file" id="upload-pics" multiple accept="image/*">
+            
+            <div class="status-badge" id="sheets-counter">0 fotos / 0 hojas</div>
+            
+            <button class="btn btn-success" onclick="window.print()">🖨️ Mandar a Imprimir / PDF</button>
+            <button class="btn btn-outline" onclick="goHome()">◀ Volver al Inicio</button>
+        </div>
+
+        <div class="workspace" id="print-workspace"></div>
+    </div>
+
+    <script>
+        let currentMode = 'rectangular';
+        let photosPerPage = 6;
+        const homeView = document.getElementById('home-view');
+        const editorView = document.getElementById('editor-view');
+        const workspace = document.getElementById('print-workspace');
+        const counterBadge = document.getElementById('sheets-counter');
+        const fileInput = document.getElementById('upload-pics');
+
+        function startEditor(mode, count) {
+            currentMode = mode;
+            photosPerPage = count;
+            homeView.style.display = 'none';
+            editorView.style.display = 'block';
+            workspace.className = `workspace mode-${mode}`;
+            counterBadge.textContent = `0 fotos / 0 hojas`;
+            workspace.innerHTML = '';
+            fileInput.value = '';
+        }
+
+        function goHome() { homeView.style.display = 'block'; editorView.style.display = 'none'; workspace.innerHTML = ''; }
+
+        fileInput.addEventListener('change', function(e) {
+            const files = Array.from(e.target.files);
+            if(files.length === 0) return;
+
+            const totalPhotos = files.length;
+            const totalSheets = Math.ceil(totalPhotos / photosPerPage);
+            counterBadge.textContent = `${totalPhotos} fotos / ${totalSheets} ${totalSheets === 1 ? 'hoja' : 'hojas'}`;
+
+            workspace.innerHTML = ''; 
+            let fileIndex = 0;
+
+            for (let s = 1; s <= totalSheets; s++) {
+                const pageCanvas = document.createElement('div');
+                pageCanvas.classList.add('page-canvas');
+                
+                const pageTag = document.createElement('div');
+                pageTag.classList.add('page-indicator-tag');
+                pageTag.textContent = `Hoja Carta N° ${s} (${photosPerPage} por página)`;
+                pageCanvas.appendChild(pageTag);
+
+                const polaroidGrid = document.createElement('div');
+                polaroidGrid.classList.add('polaroid-grid');
+
+                for (let p = 1; p <= photosPerPage; p++) {
+                    if (fileIndex >= totalPhotos) break;
+
+                    const currentFile = files[fileIndex];
+                    const uniqueId = `s${s}-p${p}`;
+                    
+                    let maxChars = 45;
+                    if (currentMode === 'mediana') maxChars = 60;
+                    if (currentMode === 'mini') maxChars = 36;
+                    if (currentMode === 'micro') maxChars = 24;
+
+                    const card = document.createElement('div');
+                    card.classList.add('polaroid-card');
+                    card.innerHTML = `
+                        <div class="photo-container" id="container-${uniqueId}">
+                            <img id="img-${uniqueId}" src="">
+                        </div>
+                        <div class="text-container">
+                            <input type="text" class="polaroid-input" maxlength="${maxChars}" placeholder="Escribe..." oninput="document.getElementById('c-${uniqueId}').textContent = this.value.length + '/${maxChars}'">
+                            <span class="char-counter" id="c-${uniqueId}">0/${maxChars}</span>
+                        </div>
+                    `;
+
+                    polaroidGrid.appendChild(card);
+                    setupImageReader(currentFile, uniqueId);
+                    fileIndex++;
+                }
+
+                pageCanvas.appendChild(polaroidGrid);
+                workspace.appendChild(pageCanvas);
+            }
+        });
+
+        function setupImageReader(file, uniqueId) {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = document.getElementById(`img-${uniqueId}`);
+                if(img) {
+                    img.src = event.target.result;
+                    img.onload = function() {
+                        // Inicializar valores de control de posición basados en %
+                        img.dataset.pctX = "50";
+                        img.dataset.pctY = "50";
+                        img.dataset.zoom = "1";
+                        enableSecureTouch(document.getElementById(`container-${uniqueId}`), img);
+                    };
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // Nuevo motor de gestos blindado mediante porcentajes
+        function enableSecureTouch(container, img) {
+            let isDragging = false;
+            let startX = 0, startY = 0;
+            let currentPctX = 50;
+            let currentPctY = 50;
+            let currentZoom = 1;
+            let initialDistance = 0;
+
+            // --- CONTROLES DE MOUSE ---
+            container.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                startX = e.clientX;
+                startY = e.clientY;
+            });
+            window.addEventListener('mouseup', () => { isDragging = false; });
+            container.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                moveLogic(e.clientX, e.clientY);
+            });
+            container.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                if (e.deltaY < 0) { currentZoom += 0.08; } else { currentZoom -= 0.08; }
+                if (currentZoom < 1) currentZoom = 1;
+                if (currentZoom > 4) currentZoom = 4;
+                updateTransform();
+            }, { passive: false });
+
+            // --- CONTROLES TÁCTILES ---
+            container.addEventListener('touchstart', (e) => {
+                if (e.touches.length === 1) {
+                    isDragging = true;
+                    startX = e.touches[0].clientX;
+                    startY = e.touches[0].clientY;
+                } else if (e.touches.length === 2) {
+                    isDragging = false;
+                    initialDistance = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+                }
+            }, { passive: true });
+
+            container.addEventListener('touchmove', (e) => {
+                if (e.touches.length === 1 && isDragging) {
+                    moveLogic(e.touches[0].clientX, e.touches[0].clientY);
+                } else if (e.touches.length === 2) {
+                    const currentDistance = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+                    const factor = currentDistance / initialDistance;
+                    let targetZoom = currentZoom * factor;
+                    if (targetZoom >= 1 && targetZoom <= 4) {
+                        currentZoom = targetZoom;
+                        initialDistance = currentDistance;
+                        updateTransform();
+                    }
+                }
+            }, { passive: true });
+
+            container.addEventListener('touchend', () => { isDragging = false; });
+
+            function moveLogic(clientX, clientY) {
+                const deltaX = startX - clientX;
+                const deltaY = startY - clientY;
+                startX = clientX;
+                startY = clientY;
+
+                // Ajustar sensibilidad dividida por el nivel de zoom
+                currentPctX += (deltaX / container.clientWidth) * 100 / currentZoom;
+                currentPctY += (deltaY / container.clientHeight) * 100 / currentZoom;
+
+                // Limitar entre 0% y 100% para no salirnos de la foto
+                currentPctX = Math.max(0, Math.min(100, currentPctX));
+                currentPctY = Math.max(0, Math.min(100, currentPctY));
+
+                updateTransform();
+            }
+
+            function updateTransform() {
+                // Modifica la posición y escala de forma nativa e idéntica en pantalla e impresión
+                img.style.objectPosition = `${currentPctX}% ${currentPctY}%`;
+                img.style.transform = `scale(${currentZoom})`;
+            }
+        }
+    </script>
+</body>
+</html>
