@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Photo Print Studio v14</title>
+    <title>Photo Print Studio v15</title>
     <style>
         *, *::before, *::after {
             box-sizing: border-box;
@@ -118,19 +118,19 @@
             position: absolute;
             top: 8px;
             right: 8px;
-            width: 30px;
-            height: 30px;
+            width: 32px;
+            height: 32px;
             background: #ffffff;
             color: #e74c3c;
             border: 2px solid #e74c3c;
             border-radius: 50%;
             font-weight: 900;
-            font-size: 16px;
+            font-size: 18px;
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.25);
             z-index: 100;
         }
 
@@ -204,6 +204,7 @@
 </head>
 <body>
 
+    <!-- 🏠 HOME SCREEN -->
     <div class="home-screen" id="home-view">
         <h1>Photo Print Studio</h1>
         <p>Elige el formato de impresión para tu plantilla</p>
@@ -233,6 +234,7 @@
         </div>
     </div>
 
+    <!-- 🎬 EDITOR INTERFACE -->
     <div class="editor-interface" id="editor-view">
         <div class="controls">
             <label class="file-label" for="upload-pics">📷 Seleccionar Fotos</label>
@@ -310,6 +312,7 @@
             for (let s = 1; s <= totalSheets; s++) {
                 const pageCanvas = document.createElement('div');
                 pageCanvas.classList.add('page-canvas');
+                pageCanvas.id = `page-sheet-${s}`;
                 
                 const pageTag = document.createElement('div');
                 pageTag.classList.add('page-indicator-tag');
@@ -318,6 +321,7 @@
 
                 const polaroidGrid = document.createElement('div');
                 polaroidGrid.classList.add('polaroid-grid');
+                polaroidGrid.id = `grid-sheet-${s}`;
 
                 for (let p = 1; p <= photosPerPage; p++) {
                     if (fileIndex >= totalPhotos) break;
@@ -332,6 +336,7 @@
 
                     const card = document.createElement('div');
                     card.classList.add('polaroid-card');
+                    card.id = `card-holder-${uniqueId}`;
                     card.innerHTML = `
                         <div class="photo-container" id="container-${uniqueId}">
                             <div class="delete-btn" onclick="removePhoto(event, '${uniqueId}')">×</div>
@@ -344,6 +349,7 @@
                     `;
 
                     polaroidGrid.appendChild(card);
+                    currentItem.assignedUniqueId = uniqueId;
                     loadImageData(currentItem, uniqueId);
                     fileIndex++;
                 }
@@ -476,11 +482,30 @@
             }
         }
 
-        // 🌟 CORRECCIÓN CRÍTICA BLINDADA: event.stopPropagation() congela el clic en la X para que no borre todo
+        // 🌟 RE-DISEÑO ABSOLUTO DE ELIMINACIÓN TÁCTIL (v15): Evita colapsos de memoria
         function removePhoto(event, idToKill) {
             event.stopPropagation(); 
+            event.preventDefault();
+
+            // 1. Encontrar y destruir la tarjeta en la pantalla inmediatamente (.remove)
+            const cardElement = document.getElementById(`card-holder-${idToKill}`);
+            if (cardElement) { cardElement.remove(); }
+
+            // 2. Sacar la foto del arreglo interno en silencio sin re-renderizar
             allLoadedFiles = allLoadedFiles.filter(item => item.id !== idToKill);
-            renderWorkspace();
+
+            // 3. Re-calcular contadores generales e indicadores de hojas al momento
+            const totalPhotos = allLoadedFiles.length;
+            const totalSheets = Math.ceil(totalPhotos / photosPerPage);
+            counterBadge.textContent = `${totalPhotos} fotos / ${totalSheets} ${totalSheets === 1 ? 'hoja' : 'hojas'}`;
+
+            // 4. Limpieza de lienzos vacíos (si una página se queda en 0 fotos, se elimina la hoja completa)
+            document.querySelectorAll('.page-canvas').forEach((canvas) => {
+                const innerGrid = canvas.querySelector('.polaroid-grid');
+                if (innerGrid && innerGrid.children.length === 0) {
+                    canvas.remove();
+                }
+            });
         }
     </script>
 </body>
