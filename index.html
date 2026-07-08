@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Photo Print Studio v17.1</title>
+    <title>Photo Print Studio v19</title>
     <style>
         *, *::before, *::after {
             box-sizing: border-box;
@@ -203,6 +203,7 @@
 </head>
 <body>
 
+    <!-- 🏠 HOME SCREEN -->
     <div class="home-screen" id="home-view">
         <h1>Photo Print Studio</h1>
         <p>Elige el formato de impresión para tu plantilla</p>
@@ -232,6 +233,7 @@
         </div>
     </div>
 
+    <!-- 🎬 EDITOR INTERFACE -->
     <div class="editor-interface" id="editor-view">
         <div class="controls">
             <label class="file-label" for="upload-pics">📷 Seleccionar Fotos</label>
@@ -298,6 +300,7 @@
         });
 
         function renderWorkspace() {
+            // Guardar textos e imágenes vivas antes de inyectar las nuevas
             allLoadedFiles.forEach(item => {
                 const inputEl = document.getElementById('input-' + item.id);
                 const imgEl = document.getElementById('img-' + item.id);
@@ -356,7 +359,6 @@
                     `;
 
                     polaroidGrid.appendChild(card);
-                    currentItem.assignedUniqueId = uniqueId;
                     loadImageData(currentItem, uniqueId);
                     fileIndex++;
                 }
@@ -423,7 +425,6 @@
             let currentX = parseFloat(img.dataset.x) || 0;
             let currentY = parseFloat(img.dataset.y) || 0;
             let currentZoom = parseFloat(img.dataset.zoom) || 1;
-            let initialDistance = 0;
 
             container.addEventListener('mousedown', (e) => {
                 if (e.target.classList.contains('delete-btn')) return;
@@ -452,9 +453,6 @@
                     isDragging = true;
                     startX = e.touches[0].clientX - currentX;
                     startY = e.touches[0].clientY - currentY;
-                } else if (e.touches.length === 2) {
-                    isDragging = false;
-                    initialDistance = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
                 }
             }, { passive: true });
 
@@ -463,15 +461,6 @@
                     currentX = e.touches[0].clientX - startX;
                     currentY = e.touches[0].clientY - startY;
                     applyTransform();
-                } else if (e.touches.length === 2) {
-                    const currentDistance = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-                    const factor = currentDistance / initialDistance;
-                    let targetZoom = currentZoom * factor;
-                    if (targetZoom >= 1 && targetZoom <= 4) {
-                        currentZoom = targetZoom;
-                        initialDistance = currentDistance;
-                        applyTransform();
-                    }
                 }
             }, { passive: true });
 
@@ -494,22 +483,30 @@
             }
         }
 
-        // 🌟 CORRECCIÓN INTEGRAL DE MEMORIA: Respalda textos dinámicamente antes de limpiar
+        // 🌟 ELIMINACIÓN ASILADA FÍSICA (v19): Destruye el elemento sin tocar el render global
         function removePhoto(event, idToKill) {
             event.stopPropagation(); 
             event.preventDefault();
 
-            // 1. Guardar todos los textos actuales de la pantalla en la memoria del arreglo antes del cambio
-            allLoadedFiles.forEach(item => {
-                const inputEl = document.getElementById('input-' + item.id);
-                if (inputEl) { item.text = inputEl.value; }
-            });
+            // 1. Quitar la tarjeta de la pantalla físicamente al momento
+            const cardElement = document.getElementById(`card-holder-${idToKill}`);
+            if (cardElement) { cardElement.remove(); }
 
-            // 2. Filtrar el arreglo global para descartar únicamente la foto tachada
+            // 2. Sacar el elemento de la lista en la memoria silenciosamente
             allLoadedFiles = allLoadedFiles.filter(item => item.id !== idToKill);
 
-            // 3. Volver a renderizar la grilla con los datos limpios y textos sincronizados
-            renderWorkspace();
+            // 3. Sincronizar contadores de la cabecera al instante
+            const totalPhotos = allLoadedFiles.length;
+            const totalSheets = Math.ceil(totalPhotos / photosPerPage);
+            counterBadge.textContent = `${totalPhotos} fotos / ${totalSheets} ${totalSheets === 1 ? 'hoja' : 'hojas'}`;
+
+            // 4. Si una hoja se queda vacía, borrar la hoja completa de la grilla
+            document.querySelectorAll('.page-canvas').forEach((canvas) => {
+                const innerGrid = canvas.querySelector('.polaroid-grid');
+                if (innerGrid && innerGrid.children.length === 0) {
+                    canvas.remove();
+                }
+            });
         }
     </script>
 </body>
