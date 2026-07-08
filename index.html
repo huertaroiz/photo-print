@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Photo Print Studio v19</title>
+    <title>Photo Print Studio v20</title>
     <style>
         *, *::before, *::after {
             box-sizing: border-box;
@@ -108,6 +108,7 @@
             transform: translate(-50%, -50%) scale(1);
             transform-origin: center center;
             pointer-events: none; 
+            /* Filtros optimizados contra oscuridad HP */
             filter: sepia(0.06) saturate(1.1) contrast(0.88) brightness(1.08); 
         }
         .photo-container::after { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(245, 222, 179, 0.03); pointer-events: none; }
@@ -203,7 +204,6 @@
 </head>
 <body>
 
-    <!-- 🏠 HOME SCREEN -->
     <div class="home-screen" id="home-view">
         <h1>Photo Print Studio</h1>
         <p>Elige el formato de impresión para tu plantilla</p>
@@ -233,7 +233,6 @@
         </div>
     </div>
 
-    <!-- 🎬 EDITOR INTERFACE -->
     <div class="editor-interface" id="editor-view">
         <div class="controls">
             <label class="file-label" for="upload-pics">📷 Seleccionar Fotos</label>
@@ -283,9 +282,7 @@
             if(newFiles.length === 0) return;
 
             newFiles.forEach(file => {
-                const uniqueFileId = 'img_' + Math.random().toString(36).substr(2, 9);
                 allLoadedFiles.push({
-                    id: uniqueFileId,
                     fileObject: file,
                     srcData: null,
                     text: '',
@@ -300,10 +297,10 @@
         });
 
         function renderWorkspace() {
-            // Guardar textos e imágenes vivas antes de inyectar las nuevas
-            allLoadedFiles.forEach(item => {
-                const inputEl = document.getElementById('input-' + item.id);
-                const imgEl = document.getElementById('img-' + item.id);
+            // 🌟 RESPALDO INTEGRAL BASADO EN ÍNDICE SECUENCIAL ESTRICTO
+            allLoadedFiles.forEach((item, index) => {
+                const inputEl = document.getElementById('input-' + index);
+                const imgEl = document.getElementById('img-' + index);
                 if (inputEl) { item.text = inputEl.value; }
                 if (imgEl) {
                     item.zoom = imgEl.dataset.zoom || 1;
@@ -337,7 +334,7 @@
                     if (fileIndex >= totalPhotos) break;
 
                     const currentItem = allLoadedFiles[fileIndex];
-                    const uniqueId = currentItem.id;
+                    const globalIdx = fileIndex; 
                     
                     let maxChars = 45;
                     if (currentMode === 'mediana') maxChars = 60;
@@ -346,20 +343,20 @@
 
                     const card = document.createElement('div');
                     card.classList.add('polaroid-card');
-                    card.id = `card-holder-${uniqueId}`;
+                    card.id = `card-holder-${globalIdx}`;
                     card.innerHTML = `
-                        <div class="photo-container" id="container-${uniqueId}">
-                            <div class="delete-btn" onclick="removePhoto(event, '${uniqueId}')">×</div>
-                            <img id="img-${uniqueId}" src="">
+                        <div class="photo-container" id="container-${globalIdx}">
+                            <div class="delete-btn" onclick="removePhoto(event, ${globalIdx})">×</div>
+                            <img id="img-${globalIdx}" src="">
                         </div>
                         <div class="text-container">
-                            <input type="text" class="polaroid-input" id="input-${uniqueId}" maxlength="${maxChars}" placeholder="Escribe..." oninput="document.getElementById('c-${uniqueId}').textContent = this.value.length + '/${maxChars}'">
-                            <span class="char-counter" id="c-${uniqueId}">0/${maxChars}</span>
+                            <input type="text" class="polaroid-input" id="input-${globalIdx}" maxlength="${maxChars}" placeholder="Escribe..." oninput="document.getElementById('c-${globalIdx}').textContent = this.value.length + '/${maxChars}'">
+                            <span class="char-counter" id="c-${globalIdx}">0/${maxChars}</span>
                         </div>
                     `;
 
                     polaroidGrid.appendChild(card);
-                    loadImageData(currentItem, uniqueId);
+                    loadImageData(currentItem, globalIdx);
                     fileIndex++;
                 }
 
@@ -368,32 +365,32 @@
             }
         }
 
-        function loadImageData(item, uniqueId) {
+        function loadImageData(item, globalIdx) {
             if (item.srcData) {
-                renderImageToCard(item.srcData, uniqueId, item.text, item);
+                renderImageToCard(item.srcData, globalIdx, item.text, item);
             } else {
                 const reader = new FileReader();
                 reader.onload = function(event) {
                     item.srcData = event.target.result;
-                    renderImageToCard(item.srcData, uniqueId, item.text, item);
+                    renderImageToCard(item.srcData, globalIdx, item.text, item);
                 };
                 reader.readAsDataURL(item.fileObject); 
             }
         }
 
-        function renderImageToCard(src, uniqueId, textValue, item) {
-            const img = document.getElementById(`img-${uniqueId}`);
-            const input = document.getElementById(`input-${uniqueId}`);
+        function renderImageToCard(src, globalIdx, textValue, item) {
+            const img = document.getElementById(`img-${globalIdx}`);
+            const input = document.getElementById(`input-${globalIdx}`);
             if(!img) return;
 
             img.src = src;
             if(textValue && input) {
                 input.value = textValue;
-                document.getElementById(`c-${uniqueId}`).textContent = `${textValue.length}/${input.maxLength}`;
+                document.getElementById(`c-${globalIdx}`).textContent = `${textValue.length}/${input.maxLength}`;
             }
 
             img.onload = function() {
-                const container = document.getElementById(`container-${uniqueId}`);
+                const container = document.getElementById(`container-${globalIdx}`);
                 initializeSecureDimensions(container, img, item);
             };
         }
@@ -483,30 +480,28 @@
             }
         }
 
-        // 🌟 ELIMINACIÓN ASILADA FÍSICA (v19): Destruye el elemento sin tocar el render global
-        function removePhoto(event, idToKill) {
+        // 🌟 NUEVA ELIMINACIÓN RECALIBRADA POR ÍNDICE SECUENCIAL ESTRICTO
+        function removePhoto(event, indexToKill) {
             event.stopPropagation(); 
             event.preventDefault();
 
-            // 1. Quitar la tarjeta de la pantalla físicamente al momento
-            const cardElement = document.getElementById(`card-holder-${idToKill}`);
-            if (cardElement) { cardElement.remove(); }
-
-            // 2. Sacar el elemento de la lista en la memoria silenciosamente
-            allLoadedFiles = allLoadedFiles.filter(item => item.id !== idToKill);
-
-            // 3. Sincronizar contadores de la cabecera al instante
-            const totalPhotos = allLoadedFiles.length;
-            const totalSheets = Math.ceil(totalPhotos / photosPerPage);
-            counterBadge.textContent = `${totalPhotos} fotos / ${totalSheets} ${totalSheets === 1 ? 'hoja' : 'hojas'}`;
-
-            // 4. Si una hoja se queda vacía, borrar la hoja completa de la grilla
-            document.querySelectorAll('.page-canvas').forEach((canvas) => {
-                const innerGrid = canvas.querySelector('.polaroid-grid');
-                if (innerGrid && innerGrid.children.length === 0) {
-                    canvas.remove();
+            // 1. Guardar todos los textos actuales antes de modificar la grilla
+            allLoadedFiles.forEach((item, index) => {
+                const inputEl = document.getElementById('input-' + index);
+                const imgEl = document.getElementById('img-' + index);
+                if (inputEl) { item.text = inputEl.value; }
+                if (imgEl) {
+                    item.zoom = imgEl.dataset.zoom || 1;
+                    item.x = imgEl.dataset.x || 0;
+                    item.y = imgEl.dataset.y || 0;
                 }
             });
+
+            // 2. Remover del arreglo global usando el índice real
+            allLoadedFiles.splice(indexToKill, 1);
+
+            // 3. Volver a pintar todo el lienzo con la grilla reacomodada de forma limpia
+            renderWorkspace();
         }
     </script>
 </body>
