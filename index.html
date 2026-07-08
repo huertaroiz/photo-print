@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Photo Print Studio v12</title>
+    <title>Photo Print Studio v13</title>
     <style>
         *, *::before, *::after {
             box-sizing: border-box;
@@ -96,7 +96,7 @@
         .polaroid-grid { display: flex; flex-direction: column; gap: 15px; }
         .polaroid-card { background-color: #ffffff; border: 1px solid #e0e0e0; position: relative; width: 100%; border-radius: 2px; }
 
-        /* Contenedor de Imagen */
+        /* Contenedor de Imagen y Botón de Borrar */
         .photo-container { width: 100%; background-color: #f7f7f7; overflow: hidden; position: relative; cursor: grab; user-select: none; touch-action: none; }
         .photo-container:active { cursor: grabbing; }
         
@@ -108,11 +108,34 @@
             transform: translate(-50%, -50%) scale(1);
             transform-origin: center center;
             pointer-events: none; 
-            /* 🌟 Filtros de luz optimizados para tu HP DeskJet */
+            /* Filtros optimizados contra oscuridad HP */
             filter: sepia(0.06) saturate(1.1) contrast(0.88) brightness(1.08); 
         }
         .photo-container::after { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(245, 222, 179, 0.03); pointer-events: none; }
         
+        /* 🌟 Botón Eliminar Foto Estilizado */
+        .delete-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 28px;
+            height: 28px;
+            background: white;
+            color: #e74c3c;
+            border: 1px solid #e0e0e0;
+            border-radius: 50%;
+            font-weight: bold;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+            z-index: 10;
+            transition: transform 0.1s ease;
+        }
+        .delete-btn:active { transform: scale(0.85); }
+
         .text-container { position: absolute; bottom: 0; left: 0; width: 100%; padding: 8px 12px; display: flex; flex-direction: column; justify-content: center; }
         .polaroid-input { width: 100%; border: none; background: transparent; text-align: center; font-family: 'Courier New', Courier, monospace; font-size: 15px; font-weight: bold; color: #2b2b2b; outline: none; }
         .char-counter { position: absolute; right: 10px; bottom: 4px; font-size: 9px; color: #bbb; }
@@ -138,7 +161,7 @@
         /* 🖨️ MOTOR IMPRESIÓN SEGURO */
         @media print {
             body { background: none; padding: 0; margin: 0; }
-            .controls, .char-counter, .page-indicator-tag, .home-screen { display: none !important; }
+            .controls, .char-counter, .page-indicator-tag, .home-screen, .delete-btn { display: none !important; }
             .editor-interface { display: block !important; }
             .workspace { display: block !important; gap: 0 !important; }
             
@@ -229,7 +252,7 @@
     <script>
         let currentMode = 'rectangular';
         let photosPerPage = 6;
-        let allLoadedFiles = []; 
+        let allLoadedFiles = []; // Almacén en memoria de los objetos estructurados de cada foto
         
         const homeView = document.getElementById('home-view');
         const editorView = document.getElementById('editor-view');
@@ -260,14 +283,25 @@
             const newFiles = Array.from(e.target.files);
             if(newFiles.length === 0) return;
 
-            allLoadedFiles = allLoadedFiles.concat(newFiles);
+            // Mapear cada archivo a un objeto con ID único para mantener sus propiedades asociadas
+            newFiles.forEach(file => {
+                const uniqueFileId = 'img_' + Math.random().toString(36).substr(2, 9);
+                allLoadedFiles.push({
+                    id: uniqueFileId,
+                    fileObject: file,
+                    srcData: null,
+                    text: ''
+                });
+            });
+
             renderWorkspace();
         });
 
         function renderWorkspace() {
-            const savedTexts = {};
-            document.querySelectorAll('.polaroid-input').forEach(input => {
-                savedTexts[input.id] = input.value;
+            // Respaldar textos escritos antes de renderizar
+            allLoadedFiles.forEach(item => {
+                const inputEl = document.getElementById('input-' + item.id);
+                if (inputEl) { item.text = inputEl.value; }
             });
 
             const totalPhotos = allLoadedFiles.length;
@@ -292,8 +326,8 @@
                 for (let p = 1; p <= photosPerPage; p++) {
                     if (fileIndex >= totalPhotos) break;
 
-                    const currentFile = allLoadedFiles[fileIndex];
-                    const uniqueId = `s${s}-p${p}`;
+                    const currentItem = allLoadedFiles[fileIndex];
+                    const uniqueId = currentItem.id;
                     
                     let maxChars = 45;
                     if (currentMode === 'mediana') maxChars = 60;
@@ -304,6 +338,7 @@
                     card.classList.add('polaroid-card');
                     card.innerHTML = `
                         <div class="photo-container" id="container-${uniqueId}">
+                            <div class="delete-btn" onclick="removePhoto('${uniqueId}')">×</div>
                             <img id="img-${uniqueId}" src="">
                         </div>
                         <div class="text-container">
@@ -313,7 +348,7 @@
                     `;
 
                     polaroidGrid.appendChild(card);
-                    setupImageReader(currentFile, uniqueId, savedTexts[`input-${uniqueId}`]);
+                    loadImageData(currentItem, uniqueId);
                     fileIndex++;
                 }
 
@@ -322,28 +357,37 @@
             }
         }
 
-        function setupImageReader(file, uniqueId, oldText) {
-            const reader = new FileReader();
-            reader.onload = function(event) {
-                const img = document.getElementById(`img-${uniqueId}`);
-                const input = document.getElementById(`input-${uniqueId}`);
-                
-                if(img) {
-                    img.src = event.target.result;
-                    if(oldText) {
-                        input.value = oldText;
-                        document.getElementById(`c-${uniqueId}`).textContent = `${oldText.length}/${input.maxLength}`;
-                    }
-                    
-                    img.onload = function() {
-                        const container = document.getElementById(`container-${uniqueId}`);
-                        initializeSecureDimensions(container, img);
-                    };
-                }
-            };
-            reader.readAsDataURL(file);
+        function loadImageData(item, uniqueId) {
+            if (item.srcData) {
+                renderImageToCard(item.srcData, uniqueId, item.text);
+            } else {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    item.srcData = event.target.result;
+                    renderImageToCard(item.srcData, uniqueId, item.text);
+                };
+                reader.readAsDataURL(item.fileObject);
+            }
         }
 
+        function renderImageToCard(src, uniqueId, textValue) {
+            const img = document.getElementById(`img-${uniqueId}`);
+            const input = document.getElementById(`input-${uniqueId}`);
+            if(!img) return;
+
+            img.src = src;
+            if(textValue && input) {
+                input.value = textValue;
+                document.getElementById(`c-${uniqueId}`).textContent = `${textValue.length}/${input.maxLength}`;
+            }
+
+            img.onload = function() {
+                const container = document.getElementById(`container-${uniqueId}`);
+                initializeSecureDimensions(container, img);
+            };
+        }
+
+        // 🌟 Nueva lógica matemática de inicialización libre de trabas
         function initializeSecureDimensions(container, img) {
             const cWidth = container.clientWidth;
             const cHeight = container.clientHeight;
@@ -357,6 +401,7 @@
             img.style.width = (iWidth * renderScale) + 'px';
             img.style.height = (iHeight * renderScale) + 'px';
 
+            // Almacenar transformaciones relativas independientes en memoria temporal
             img.dataset.zoom = "1";
             img.dataset.x = "0";
             img.dataset.y = "0";
@@ -372,8 +417,8 @@
             let currentZoom = 1;
             let initialDistance = 0;
 
-            // --- PC (MOUSE) ---
             container.addEventListener('mousedown', (e) => {
+                if (e.target.classList.contains('delete-btn')) return;
                 isDragging = true;
                 startX = e.clientX - currentX;
                 startY = e.clientY - currentY;
@@ -393,8 +438,8 @@
                 applyTransform();
             }, { passive: false });
 
-            // --- MÓVIL (TÁCTIL) ---
             container.addEventListener('touchstart', (e) => {
+                if (e.target.classList.contains('delete-btn')) return;
                 if (e.touches.length === 1) {
                     isDragging = true;
                     startX = e.touches[0].clientX - currentX;
@@ -425,9 +470,8 @@
             container.addEventListener('touchend', () => { isDragging = false; });
 
             function applyTransform() {
-                // 🌟 CORRECCIÓN CRÍTICA: Quitamos el candado que congelaba los lados al estar en escala 1.
-                // Ahora calcula los límites de desborde reales de la foto permitiendo mover horizontalmente 
-                // si la foto es más ancha que el contenedor, o verticalmente si es más alta.
+                // 🌟 CORRECCIÓN DEFINITIVA DE LÍMITES: Permite desplazar de forma fluida a lo ancho o alto
+                // detectando de manera precisa las áreas de desborde dinámicas de cada proporción de foto
                 const maxW = Math.max(0, (img.clientWidth * currentZoom - container.clientWidth) / 2);
                 const maxH = Math.max(0, (img.clientHeight * currentZoom - container.clientHeight) / 2);
 
@@ -438,6 +482,12 @@
 
                 img.style.transform = `translate(calc(-50% + ${currentX}px), calc(-50% + ${currentY}px)) scale(${currentZoom})`;
             }
+        }
+
+        // 🌟 Función para Eliminar Fotos Individualmente sin alterar el resto
+        function removePhoto(idToKill) {
+            allLoadedFiles = allLoadedFiles.filter(item => item.id !== idToKill);
+            renderWorkspace();
         }
     </script>
 </body>
