@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Photo Print Studio v20</title>
+    <title>Photo Print Studio v17.2 - Memoria Activa</title>
     <style>
         *, *::before, *::after {
             box-sizing: border-box;
@@ -108,35 +108,36 @@
             transform: translate(-50%, -50%) scale(1);
             transform-origin: center center;
             pointer-events: none; 
-            /* Filtros optimizados contra oscuridad HP */
             filter: sepia(0.06) saturate(1.1) contrast(0.88) brightness(1.08); 
         }
         .photo-container::after { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(245, 222, 179, 0.03); pointer-events: none; }
         
-        /* Botón Eliminar Foto */
-        .delete-btn {
-            position: absolute;
-            top: 8px;
-            right: 8px;
-            width: 32px;
-            height: 32px;
-            background: #ffffff;
-            color: #e74c3c;
-            border: 2px solid #e74c3c;
-            border-radius: 50%;
-            font-weight: 900;
-            font-size: 18px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.25);
-            z-index: 100;
-        }
-
         .text-container { position: absolute; bottom: 0; left: 0; width: 100%; padding: 8px 12px; display: flex; flex-direction: column; justify-content: center; }
         .polaroid-input { width: 100%; border: none; background: transparent; text-align: center; font-family: 'Courier New', Courier, monospace; font-size: 15px; font-weight: bold; color: #2b2b2b; outline: none; }
         .char-counter { position: absolute; right: 10px; bottom: 4px; font-size: 9px; color: #bbb; }
+
+        /* Botón de eliminar (X) - Estilo Visual Flotante */
+        .delete-btn {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            width: 24px;
+            height: 24px;
+            background-color: #ff4757;
+            color: white;
+            border-radius: 50%;
+            border: none;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+            z-index: 10;
+            transition: transform 0.1s ease;
+        }
+        .delete-btn:hover { transform: scale(1.1); }
 
         /* VISTAS EN PANTALLA MÓVIL */
         .mode-rectangular .polaroid-card { padding: 12px 12px 65px 12px; }
@@ -277,30 +278,55 @@
             allLoadedFiles = [];
         }
 
+        // Selector con procesamiento asíncrono
         fileInput.addEventListener('change', function(e) {
             const newFiles = Array.from(e.target.files);
             if(newFiles.length === 0) return;
 
-            newFiles.forEach(file => {
-                allLoadedFiles.push({
-                    fileObject: file,
-                    srcData: null,
-                    text: '',
-                    zoom: 1,
-                    x: 0,
-                    y: 0
-                });
+            // Rescatamos lo que está actualmente en pantalla antes de procesar lo nuevo
+            allLoadedFiles.forEach(item => {
+                const inputEl = document.getElementById('input-' + item.id);
+                const imgEl = document.getElementById('img-' + item.id);
+                if (inputEl) { item.text = inputEl.value; }
+                if (imgEl) {
+                    item.zoom = imgEl.dataset.zoom || 1;
+                    item.x = imgEl.dataset.x || 0;
+                    item.y = imgEl.dataset.y || 0;
+                }
             });
 
-            fileInput.value = "";
-            renderWorkspace();
+            let processedCount = 0;
+
+            newFiles.forEach(file => {
+                const uniqueFileId = 'img_' + Math.random().toString(36).substr(2, 9);
+                const reader = new FileReader();
+                
+                reader.onload = function(event) {
+                    allLoadedFiles.push({
+                        id: uniqueFileId,
+                        fileObject: file,
+                        srcData: event.target.result, 
+                        text: '',
+                        zoom: 1,
+                        x: 0,
+                        y: 0
+                    });
+
+                    processedCount++;
+                    if(processedCount === newFiles.length) {
+                        fileInput.value = "";
+                        renderWorkspace();
+                    }
+                };
+                reader.readAsDataURL(file);
+            });
         });
 
         function renderWorkspace() {
-            // 🌟 RESPALDO INTEGRAL BASADO EN ÍNDICE SECUENCIAL ESTRICTO
-            allLoadedFiles.forEach((item, index) => {
-                const inputEl = document.getElementById('input-' + index);
-                const imgEl = document.getElementById('img-' + index);
+            // Salvar estados actuales antes de redibujar
+            allLoadedFiles.forEach(item => {
+                const inputEl = document.getElementById('input-' + item.id);
+                const imgEl = document.getElementById('img-' + item.id);
                 if (inputEl) { item.text = inputEl.value; }
                 if (imgEl) {
                     item.zoom = imgEl.dataset.zoom || 1;
@@ -319,7 +345,6 @@
             for (let s = 1; s <= totalSheets; s++) {
                 const pageCanvas = document.createElement('div');
                 pageCanvas.classList.add('page-canvas');
-                pageCanvas.id = `page-sheet-${s}`;
                 
                 const pageTag = document.createElement('div');
                 pageTag.classList.add('page-indicator-tag');
@@ -328,13 +353,12 @@
 
                 const polaroidGrid = document.createElement('div');
                 polaroidGrid.classList.add('polaroid-grid');
-                polaroidGrid.id = `grid-sheet-${s}`;
 
                 for (let p = 1; p <= photosPerPage; p++) {
                     if (fileIndex >= totalPhotos) break;
 
                     const currentItem = allLoadedFiles[fileIndex];
-                    const globalIdx = fileIndex; 
+                    const uniqueId = currentItem.id;
                     
                     let maxChars = 45;
                     if (currentMode === 'mediana') maxChars = 60;
@@ -343,20 +367,20 @@
 
                     const card = document.createElement('div');
                     card.classList.add('polaroid-card');
-                    card.id = `card-holder-${globalIdx}`;
                     card.innerHTML = `
-                        <div class="photo-container" id="container-${globalIdx}">
-                            <div class="delete-btn" onclick="removePhoto(event, ${globalIdx})">×</div>
-                            <img id="img-${globalIdx}" src="">
+                        <button class="delete-btn" onclick="deletePhoto('${uniqueId}')">×</button>
+                        <div class="photo-container" id="container-${uniqueId}">
+                            <img id="img-${uniqueId}" src="">
                         </div>
                         <div class="text-container">
-                            <input type="text" class="polaroid-input" id="input-${globalIdx}" maxlength="${maxChars}" placeholder="Escribe..." oninput="document.getElementById('c-${globalIdx}').textContent = this.value.length + '/${maxChars}'">
-                            <span class="char-counter" id="c-${globalIdx}">0/${maxChars}</span>
+                            <input type="text" class="polaroid-input" id="input-${uniqueId}" maxlength="${maxChars}" placeholder="Escribe..." oninput="document.getElementById('c-${uniqueId}').textContent = this.value.length + '/${maxChars}'">
+                            <span class="char-counter" id="c-${uniqueId}">0/${maxChars}</span>
                         </div>
                     `;
 
                     polaroidGrid.appendChild(card);
-                    loadImageData(currentItem, globalIdx);
+                    
+                    renderImageToCard(currentItem.srcData, uniqueId, currentItem.text, currentItem);
                     fileIndex++;
                 }
 
@@ -365,34 +389,23 @@
             }
         }
 
-        function loadImageData(item, globalIdx) {
-            if (item.srcData) {
-                renderImageToCard(item.srcData, globalIdx, item.text, item);
-            } else {
-                const reader = new FileReader();
-                reader.onload = function(event) {
-                    item.srcData = event.target.result;
-                    renderImageToCard(item.srcData, globalIdx, item.text, item);
+        function renderImageToCard(src, uniqueId, textValue, item) {
+            setTimeout(() => {
+                const img = document.getElementById(`img-${uniqueId}`);
+                const input = document.getElementById(`input-${uniqueId}`);
+                if(!img) return;
+
+                img.src = src;
+                if(textValue && input) {
+                    input.value = textValue;
+                    document.getElementById(`c-${uniqueId}`).textContent = `${textValue.length}/${input.maxLength}`;
+                }
+
+                img.onload = function() {
+                    const container = document.getElementById(`container-${uniqueId}`);
+                    initializeSecureDimensions(container, img, item);
                 };
-                reader.readAsDataURL(item.fileObject); 
-            }
-        }
-
-        function renderImageToCard(src, globalIdx, textValue, item) {
-            const img = document.getElementById(`img-${globalIdx}`);
-            const input = document.getElementById(`input-${globalIdx}`);
-            if(!img) return;
-
-            img.src = src;
-            if(textValue && input) {
-                input.value = textValue;
-                document.getElementById(`c-${globalIdx}`).textContent = `${textValue.length}/${input.maxLength}`;
-            }
-
-            img.onload = function() {
-                const container = document.getElementById(`container-${globalIdx}`);
-                initializeSecureDimensions(container, img, item);
-            };
+            }, 10);
         }
 
         function initializeSecureDimensions(container, img, item) {
@@ -423,8 +436,10 @@
             let currentY = parseFloat(img.dataset.y) || 0;
             let currentZoom = parseFloat(img.dataset.zoom) || 1;
 
+            let initialDistance = 0;
+            let initialZoom = 1;
+
             container.addEventListener('mousedown', (e) => {
-                if (e.target.classList.contains('delete-btn')) return;
                 isDragging = true;
                 startX = e.clientX - currentX;
                 startY = e.clientY - currentY;
@@ -445,11 +460,17 @@
             }, { passive: false });
 
             container.addEventListener('touchstart', (e) => {
-                if (e.target.classList.contains('delete-btn')) return;
                 if (e.touches.length === 1) {
                     isDragging = true;
                     startX = e.touches[0].clientX - currentX;
                     startY = e.touches[0].clientY - currentY;
+                } else if (e.touches.length === 2) {
+                    isDragging = false; 
+                    initialDistance = Math.hypot(
+                        e.touches[0].clientX - e.touches[1].clientX,
+                        e.touches[0].clientY - e.touches[1].clientY
+                    );
+                    initialZoom = currentZoom;
                 }
             }, { passive: true });
 
@@ -457,6 +478,16 @@
                 if (e.touches.length === 1 && isDragging) {
                     currentX = e.touches[0].clientX - startX;
                     currentY = e.touches[0].clientY - startY;
+                    applyTransform();
+                } else if (e.touches.length === 2) {
+                    const currentDistance = Math.hypot(
+                        e.touches[0].clientX - e.touches[1].clientX,
+                        e.touches[0].clientY - e.touches[1].clientY
+                    );
+                    const factor = currentDistance / initialDistance;
+                    currentZoom = initialZoom * factor;
+                    if (currentZoom < 1) currentZoom = 1;
+                    if (currentZoom > 4) currentZoom = 4;
                     applyTransform();
                 }
             }, { passive: true });
@@ -480,15 +511,11 @@
             }
         }
 
-        // 🌟 NUEVA ELIMINACIÓN RECALIBRADA POR ÍNDICE SECUENCIAL ESTRICTO
-        function removePhoto(event, indexToKill) {
-            event.stopPropagation(); 
-            event.preventDefault();
-
-            // 1. Guardar todos los textos actuales antes de modificar la grilla
-            allLoadedFiles.forEach((item, index) => {
-                const inputEl = document.getElementById('input-' + index);
-                const imgEl = document.getElementById('img-' + index);
+        // Nueva lógica para eliminar fotos manteniendo a salvo la memoria
+        function deletePhoto(idToDelete) {
+            allLoadedFiles.forEach(item => {
+                const inputEl = document.getElementById('input-' + item.id);
+                const imgEl = document.getElementById('img-' + item.id);
                 if (inputEl) { item.text = inputEl.value; }
                 if (imgEl) {
                     item.zoom = imgEl.dataset.zoom || 1;
@@ -497,10 +524,7 @@
                 }
             });
 
-            // 2. Remover del arreglo global usando el índice real
-            allLoadedFiles.splice(indexToKill, 1);
-
-            // 3. Volver a pintar todo el lienzo con la grilla reacomodada de forma limpia
+            allLoadedFiles = allLoadedFiles.filter(item => item.id !== idToDelete);
             renderWorkspace();
         }
     </script>
