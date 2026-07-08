@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Photo Print Studio v11</title>
+    <title>Photo Print Studio v12</title>
     <style>
         *, *::before, *::after {
             box-sizing: border-box;
@@ -96,21 +96,20 @@
         .polaroid-grid { display: flex; flex-direction: column; gap: 15px; }
         .polaroid-card { background-color: #ffffff; border: 1px solid #e0e0e0; position: relative; width: 100%; border-radius: 2px; }
 
-        /* Ajustes de Imagen y Transformación */
+        /* Ajustes de Imagen con Libertad de Movimiento Absoluta */
         .photo-container { width: 100%; background-color: #f7f7f7; overflow: hidden; position: relative; cursor: grab; user-select: none; touch-action: none; }
         .photo-container:active { cursor: grabbing; }
         
-        /* Modificado para soportar transformaciones combinadas de escala y traslación libre */
+        /* Eliminamos el object-fit restrictivo para manejar el redimensionamiento dinámico vía JS */
         .photo-container img { 
             position: absolute;
             top: 50%;
             left: 50%;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
+            display: block;
             transform: translate(-50%, -50%) scale(1);
             transform-origin: center center;
             pointer-events: none; 
+            /* 🌟 Filtros de luz optimizados para tu HP DeskJet */
             filter: sepia(0.06) saturate(1.1) contrast(0.88) brightness(1.08); 
         }
         .photo-container::after { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(245, 222, 179, 0.03); pointer-events: none; }
@@ -129,7 +128,7 @@
         .mode-mediana .text-container { height: 75px; }
 
         .mode-mini .polaroid-card { padding: 12px 12px 70px 12px; }
-        .mode-mini .photo-container { aspect-ratio: 46 / 62; width: 65%; margin: 0 auto; }
+        .mode-mini .photo-container { aspect-ratio: 5.4 / 6.3; width: 65%; margin: 0 auto; }
         .mode-mini .text-container { height: 70px; }
 
         .mode-micro .polaroid-card { padding: 12px 12px 55px 12px; }
@@ -231,7 +230,7 @@
     <script>
         let currentMode = 'rectangular';
         let photosPerPage = 6;
-        let allLoadedFiles = []; // Memoria global acumulativa para guardar los archivos
+        let allLoadedFiles = []; 
         
         const homeView = document.getElementById('home-view');
         const editorView = document.getElementById('editor-view');
@@ -262,14 +261,11 @@
             const newFiles = Array.from(e.target.files);
             if(newFiles.length === 0) return;
 
-            // 🌟 Sumar las fotos nuevas al final de las viejas en vez de borrar todo
             allLoadedFiles = allLoadedFiles.concat(newFiles);
-
             renderWorkspace();
         });
 
         function renderWorkspace() {
-            // Guardar textos existentes en memoria temporal antes de re-dibujar
             const savedTexts = {};
             document.querySelectorAll('.polaroid-input').forEach(input => {
                 savedTexts[input.id] = input.value;
@@ -340,17 +336,40 @@
                         document.getElementById(`c-${uniqueId}`).textContent = `${oldText.length}/${input.maxLength}`;
                     }
                     
-                    // Inicializar estados nativos libres
-                    img.dataset.zoom = "1";
-                    img.dataset.x = "0";
-                    img.dataset.y = "0";
-                    enableFreeTransform(document.getElementById(`container-${uniqueId}`), img);
+                    img.onload = function() {
+                        const container = document.getElementById(`container-${uniqueId}`);
+                        initializeSecureDimensions(container, img);
+                    };
                 }
             };
             reader.readAsDataURL(file);
         }
 
-        // 🌟 Motor de Movimiento y Zoom Rediseñado: Libertad Total de traslación
+        // 🌟 Inicialización matemática basada en dimensiones crudas para liberar el arrastre
+        function initializeSecureDimensions(container, img) {
+            const cWidth = container.clientWidth;
+            const cHeight = container.clientHeight;
+            const iWidth = img.naturalWidth;
+            const iHeight = img.naturalHeight;
+
+            // Encontrar la escala base exacta para rellenar la caja simétricamente
+            const scaleX = cWidth / iWidth;
+            const scaleY = cHeight / iHeight;
+            const renderScale = Math.max(scaleX, scaleY);
+
+            // Redimensionar la imagen de forma nativa rompiendo el object-fit restrictivo
+            img.style.width = (iWidth * renderScale) + 'px';
+            img.style.height = (iHeight * renderScale) + 'px';
+
+            // Guardar datos base de control
+            img.dataset.zoom = "1";
+            img.dataset.x = "0";
+            img.dataset.y = "0";
+            
+            img.style.transform = "translate(-50%, -50%) scale(1)";
+            enableFreeTransform(container, img);
+        }
+
         function enableFreeTransform(container, img) {
             let isDragging = false;
             let startX = 0, startY = 0;
@@ -358,7 +377,7 @@
             let currentZoom = 1;
             let initialDistance = 0;
 
-            // --- RATÓN (PC) ---
+            // --- PC (MOUSE) ---
             container.addEventListener('mousedown', (e) => {
                 isDragging = true;
                 startX = e.clientX - currentX;
@@ -379,7 +398,7 @@
                 applyTransform();
             }, { passive: false });
 
-            // --- TÁCTIL (MÓVIL) ---
+            // --- MÓVIL (TÁCTIL) ---
             container.addEventListener('touchstart', (e) => {
                 if (e.touches.length === 1) {
                     isDragging = true;
@@ -411,10 +430,17 @@
             container.addEventListener('touchend', () => { isDragging = false; });
 
             function applyTransform() {
-                // Si la escala regresa a 1, centramos automáticamente la foto para evitar huecos
-                if (currentZoom === 1) { currentX = 0; currentY = 0; }
+                // Si la escala regresa a 1, limita el movimiento para que no deje bordes vacíos
+                const maxW = (img.clientWidth * currentZoom - container.clientWidth) / 2;
+                const maxH = (img.clientHeight * currentZoom - container.clientHeight) / 2;
+
+                if (currentX > maxW) currentX = maxW;
+                if (currentX < -maxW) currentX = -maxW;
+                if (currentY > maxH) currentY = maxH;
+                if (currentY < -maxH) currentY = -maxH;
                 
-                // Mueve la foto usando traslaciones reales en conjunto con el zoom
+                if (currentZoom === 1) { currentX = 0; currentY = 0; }
+
                 img.style.transform = `translate(calc(-50% + ${currentX}px), calc(-50% + ${currentY}px)) scale(${currentZoom})`;
             }
         }
